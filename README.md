@@ -1,6 +1,6 @@
 # STM32F439 UART Bootloader
 
-[![CI](https://github.com/arica06/Stm32f439-Uart-Boot/actions/workflows/ci.yml/badge.svg)](https://github.com/arica06/Stm32f439-Uart-Boot/actions/workflows/ci.yml)
+[![CI](https://github.com/arica06/Stm32f439-Uart-Bootloader/actions/workflows/ci.yml/badge.svg)](https://github.com/arica06/Stm32f439-Uart-Bootloader/actions/workflows/ci.yml)
 
 A small, readable UART bootloader for the STM32F439 (intended target: NUCLEO-F439ZI)
 with a Python host tool. It validates every image with CRC32, never leaves a
