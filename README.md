@@ -70,25 +70,53 @@ without being written twice.
 
 ## Using it in your project
 
-1. Create a STM32CubeIDE project for the NUCLEO-F439ZI (this provides the startup file, linker script, `stm32f4xx_hal_conf.h` and `stm32f4xx_it.c`).
-2. Copy `Core/Inc/bootloader.h`, `Core/Inc/bl_config.h`, `Core/Src/bootloader.c` into it.
-3. Replace the generated `Core/Src/main.c` with the one in this repo. It sets up the 180 MHz
-   clock, USART3 (ST-LINK virtual COM port, 115200 8N1), lights LD2 (blue) while the
-   bootloader runs and calls:
+The project configuration, linker scripts, and startup file are in the repository root:
+
+| File | Purpose |
+|------|---------|
+| [STM32F439_Bootloader.ioc](STM32F439_Bootloader.ioc) | STM32CubeMX / STM32CubeIDE configuration for STM32F439ZI |
+| [STM32F439ZI_FLASH_BL.ld](STM32F439ZI_FLASH_BL.ld) | Bootloader linker script: 48 KB flash at `0x08000000` |
+| [STM32F439ZI_FLASH_APP.ld](STM32F439ZI_FLASH_APP.ld) | Application linker script: 960 KB flash at `0x08010000` |
+| [startup_stm32f439xx.s](startup_stm32f439xx.s) | GNU assembler startup code and STM32F439xx interrupt vector table |
+
+1. Open `STM32F439_Bootloader.ioc` in STM32CubeMX / STM32CubeIDE and generate
+   the STM32CubeIDE project and HAL/CMSIS support files. Keep the generated
+   `system_stm32f4xx.c`, `stm32f4xx_hal_conf.h`, and `stm32f4xx_it.c`.
+   Ensure the HAL UART module is enabled in `stm32f4xx_hal_conf.h` and its driver
+   sources are included in the build; the supplied `main.c` configures USART3
+   and its GPIO pins directly.
+2. Copy `Core/Inc/bootloader.h`, `Core/Inc/bl_config.h`, and
+   `Core/Src/bootloader.c` into the generated project. Use this repository's
+   `Core/Src/main.c` as the project's main file. It configures the 180 MHz clock,
+   USART3 (PD8 TX / PD9 RX, ST-LINK virtual COM port, 115200 8N1), and LD2 (blue),
+   then calls:
    ```c
    bl_run(&huart3);   /* never returns */
    ```
    On another board, adapt the clock and UART setup and keep the `bl_run()` call.
-4. Linker script (bootloader): `FLASH ORIGIN = 0x08000000, LENGTH = 48K`, `RAM LENGTH = 191K`
-   (the last 16 bytes of SRAM are reserved for the stay flag).
-5. Application project:
-   - Linker: `FLASH ORIGIN = 0x08010000, LENGTH = 960K`, `RAM LENGTH = 191K`
-   - `system_stm32f4xx.c`: `#define VECT_TAB_OFFSET 0x10000`
-   - To request an update from the running application:
-     ```c
-     *(volatile uint32_t *)0x2002FFF0 = 0xB00710AD;
-     NVIC_SystemReset();
-     ```
+   Keep `SysTick_Handler()` calling `HAL_IncTick()` in `stm32f4xx_it.c`.
+3. Add the root-level `startup_stm32f439xx.s` to the build. Replace or exclude
+   the generated startup file so that exactly one startup file is compiled.
+   Keep the generated interrupt handlers; they override the startup file's weak
+   defaults.
+4. In **Project Properties → C/C++ Build → Settings → MCU GCC Linker → General**,
+   select `STM32F439ZI_FLASH_BL.ld` from the project root as the bootloader's
+   linker script. Replace the generated linker-script selection rather than
+   adding a second script. The supplied script sets flash to
+   `ORIGIN = 0x08000000, LENGTH = 48K`, RAM to 191 KB, and CCMRAM to 64 KB.
+5. In a separate application project, select `STM32F439ZI_FLASH_APP.ld` as the
+   linker script. It places the application at
+   `ORIGIN = 0x08010000, LENGTH = 960K` and uses the same RAM reservation.
+   In the application's `system_stm32f4xx.c`, set
+   `#define VECT_TAB_OFFSET 0x10000`; enable `USER_VECT_TAB_ADDRESS` if required
+   by that CMSIS system-file version so the offset is applied.
+6. Both linker scripts reserve the final 1 KB of SRAM
+   (`0x2002FC00..0x2002FFFF`), including the stay-in-bootloader flag at
+   `0x2002FFF0`. To request an update from the running application:
+   ```c
+   *(volatile uint32_t *)0x2002FFF0 = 0xB00710AD;
+   NVIC_SystemReset();
+   ```
 
 ## Flashing an application
 
