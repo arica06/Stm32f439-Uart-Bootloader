@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  host-tool:
+    name: Host tool (lint + tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install pyserial pytest
+
+      - name: Syntax check
+        run: python -m py_compile tools/flash_tool.py
+
+      - name: Unit tests
+        run: pytest -q tests
+
+  firmware-build:
+    name: Firmware (compile check, Cortex-M4)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # ST HAL + CMSIS headers. For reproducible builds, pin each `ref`
+      # to a release tag or commit SHA once you have chosen your versions.
+      - uses: actions/checkout@v4
+        with:
+          repository: STMicroelectronics/stm32f4xx_hal_driver
+          path: deps/hal
+
+      - uses: actions/checkout@v4
+        with:
+          repository: STMicroelectronics/cmsis_device_f4
+          path: deps/cmsis_device
+
+      - uses: actions/checkout@v4
+        with:
+          repository: ARM-software/CMSIS_5
+          ref: 5.9.0
+          path: deps/cmsis_core
+
+      - name: Install ARM GCC
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-arm-none-eabi
+
+      - name: Prepare HAL configuration
+        run: |
+          mkdir -p deps/conf
+          cp deps/hal/Inc/stm32f4xx_hal_conf_template.h deps/conf/stm32f4xx_hal_conf.h
+
+      - name: Compile bootloader and main
+        run: |
+          FLAGS="-std=gnu11 -Os -Wall -Wextra \
+            -mcpu=cortex-m4 -mthumb -mfpu=fpv4-sp-d16 -mfloat-abi=hard \
+            -DSTM32F439xx -DUSE_HAL_DRIVER \
+            -ICore/Inc -Ideps/conf \
+            -Ideps/hal/Inc -Ideps/hal/Inc/Legacy \
+            -Ideps/cmsis_device/Include \
+            -Ideps/cmsis_core/CMSIS/Core/Include"
+          arm-none-eabi-gcc -c Core/Src/bootloader.c -o bootloader.o $FLAGS
+          arm-none-eabi-gcc -c Core/Src/main.c -o main.o $FLAGS
+          arm-none-eabi-size bootloader.o main.o
